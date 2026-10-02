@@ -40,12 +40,13 @@ jobs:
 
       - name: Run and verify output
         run: |
-          output=$(./hello)
-          echo "Program output: [$output]"
-          expected="Hello World!"
-          if [ "$output" = "$expected" ]; then
+          ./hello > actual_output.txt
+          echo "Actual output bytes:"
+          xxd actual_output.txt
+          printf 'Hello World!\n' > expected_output.txt
+          if diff -u expected_output.txt actual_output.txt; then
             echo "PASSED: output matches expected."
           else
-            echo "FAILED: expected [$expected], got [$output]"
+            echo "FAILED: output did not match expected."
             exit 1
           fi
