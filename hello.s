@@ -1,8 +1,9 @@
 # AT&T 格式
 # Hello.s
 .data    # 数据段声明
-         msg : .string "Hello World!\\n"       # 要输出的字符串
-         len = . - msg                         # 字符串长度
+         msg : .ascii "Hello World!"           # 字符串主体（.ascii 不自动追加 NUL）
+             .byte 10                          # 换行符 '\n' (LF, 0x0A)，用显式字节避免转义歧义
+         len = . - msg                         # 字符串长度（含换行，共 13 字节）
 .text                   # 代码段声明
 .global _start          # 指定入口函数
 
