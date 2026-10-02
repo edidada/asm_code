@@ -1,36 +1,51 @@
-# This is a basic workflow to help you get started with Actions
+# 汇编工程 CI 工作流
+# 功能：检出代码 -> 汇编 hello.s -> 链接为可执行文件 -> 运行并校验输出
+# 说明：源码为 32 位 AT&T 语法，使用 int $0x80 系统调用；
+#       64 位 Linux 内核兼容该 32 位系统调用 ABI，故可直接在 ubuntu-latest 上构建运行。
 
 name: CI
 
-# Controls when the action will run. 
 on:
-  # Triggers the workflow on push or pull request events but only for the master branch
+  # 推送到 master 分支时触发
   push:
     branches: [ master ]
+  # 向 master 分支发起 PR 时触发
   pull_request:
     branches: [ master ]
-
-  # Allows you to run this workflow manually from the Actions tab
+  # 支持在 Actions 页面手动触发
   workflow_dispatch:
 
-# A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
-  # This workflow contains a single job called "build"
-  build:
-    # The type of runner that the job will run on
+  build-and-run:
+    name: Assemble, link and run hello.s
     runs-on: ubuntu-latest
 
-    # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
-      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
-      - uses: actions/checkout@v2
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      # Runs a single command using the runners shell
-      - name: Run a one-line script
-        run: echo Hello, world!
-
-      # Runs a set of commands using the runners shell
-      - name: Run a multi-line script
+      - name: Show as/ld version
         run: |
-          echo Add other actions to build,
-          echo test, and deploy your project.
+          as --version | head -n 1
+          ld --version | head -n 1
+
+      - name: Assemble hello.s
+        run: as -o hello.o hello.s
+
+      - name: Link to executable
+        run: ld -o hello hello.o
+
+      - name: Inspect artifact
+        run: file hello
+
+      - name: Run and verify output
+        run: |
+          output=$(./hello)
+          echo "Program output: [$output]"
+          expected="Hello World!"
+          if [ "$output" = "$expected" ]; then
+            echo "PASSED: output matches expected."
+          else
+            echo "FAILED: expected [$expected], got [$output]"
+            exit 1
+          fi
