@@ -1,3 +1,7 @@
 .idea/
 *.iml
 .workbuddy/
+
+# 构建产物：由 hello.s 经 as/ld 生成，CI 会重新构建，无需入库
+hello
+*.o
