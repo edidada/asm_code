@@ -154,28 +154,35 @@ list_print:
         ret
 
 # ---------------- 工具函数 ----------------
+# 注意：ebx 是约定中"被调方必须保存"的寄存器，而输出函数要往 ebx 里放
+# stdout 文件描述符 1，因此三个输出函数都用 pushq/popq 保存恢复 ebx。
 
 # print_str：edi = 地址, esi = 长度
 print_str:
+        pushq %rbx
         movl %edi, %ecx
         movl %esi, %edx
         movl $1, %ebx
         movl $4, %eax
         int  $0x80
+        popq %rbx
         ret
 
 # print_nl
 print_nl:
+        pushq %rbx
         movl $nl, %ecx
         movl $1, %edx
         movl $1, %ebx
         movl $4, %eax
         int  $0x80
+        popq %rbx
         ret
 
 # print_int：edi = 无符号数
 print_int:
         pushq %rsi
+        pushq %rbx
         movl %edi, %eax
         leal ibuf+11, %esi
         cmpl $0, %eax
@@ -201,6 +208,7 @@ print_int:
         movl $1, %ebx
         movl $4, %eax
         int  $0x80
+        popq %rbx
         popq %rsi
         ret
 

@@ -79,28 +79,35 @@ vector_size:
         ret
 
 # ---------------- 工具函数 ----------------
+# 注意：ebx 是约定中"被调方必须保存"的寄存器，而输出函数要往 ebx 里放
+# stdout 文件描述符 1，因此三个输出函数都用 pushq/popq 保存恢复 ebx。
 
 # print_str：edi = 字符串地址, esi = 长度
 print_str:
+        pushq %rbx
         movl %edi, %ecx
         movl %esi, %edx
         movl $1, %ebx
         movl $4, %eax
         int  $0x80
+        popq %rbx
         ret
 
 # print_nl：输出换行
 print_nl:
+        pushq %rbx
         movl $nl, %ecx
         movl $1, %edx
         movl $1, %ebx
         movl $4, %eax
         int  $0x80
+        popq %rbx
         ret
 
 # print_int：edi = 无符号数，输出其十进制形式（不含换行）
 print_int:
         pushq %rsi              # 本函数用到 esi，按约定保存
+        pushq %rbx              # 本函数用到 ebx，按约定保存
         movl %edi, %eax
         leal ibuf+11, %esi      # 从缓冲区末尾向前填数字
         cmpl $0, %eax
@@ -126,6 +133,7 @@ print_int:
         movl $1, %ebx
         movl $4, %eax
         int  $0x80
+        popq %rbx
         popq %rsi
         ret
 
