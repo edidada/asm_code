@@ -132,6 +132,10 @@ _start:
         call queue_push
         movl $3, %edi
         call queue_push
+        movl $4, %edi           # 队列共 5 个元素：1 2 3 4 5
+        call queue_push
+        movl $5, %edi
+        call queue_push
 
         movl $s_qpop, %edi      # queue pops: 1 2 3
         movl $12, %esi
