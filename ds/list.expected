@@ -1,0 +1,3 @@
+list: 1 2 3
+after remove: 1 3
+after push: 1 3 4

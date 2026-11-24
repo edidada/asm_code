@@ -1,10 +1,11 @@
-# 汇编新手示例工程 CI 工作流
-# 功能：检出代码 -> 遍历 examples/ 下全部示例 -> 逐个汇编、链接、运行，
-#       并与 examples/ 中的预期文件比对（stdout 逐字节 diff + 可选退出码比对 + 可选 stdin 输入）
-# 校验文件约定（与示例同名前缀）：
-#   examples/<name>.expected  必需：预期 stdout 内容（逐字节比对）
-#   examples/<name>.stdin     可选：运行时重定向到 stdin 的输入
-#   examples/<name>.rc        可选：预期退出码（缺省为 0）
+# 汇编工程 CI 工作流
+# 功能：检出代码 -> 遍历 examples/（新手示例）与 ds/（模仿 tbox 的数据结构）下全部程序，
+#       逐个汇编、链接、运行，并与各自目录中的预期文件比对
+#       （stdout 逐字节 diff + 可选退出码比对 + 可选 stdin 输入）
+# 校验文件约定（与源文件同名前缀、同目录）：
+#   <name>.expected  必需：预期 stdout 内容（逐字节比对）
+#   <name>.stdin     可选：运行时重定向到 stdin 的输入
+#   <name>.rc        可选：预期退出码（缺省为 0）
 # 说明：源码为 32 位 AT&T 语法，使用 int $0x80 系统调用；
 #       ubuntu-latest 上按宿主默认（64 位）汇编，int $0x80 经内核 32 位兼容层正常工作。
 
@@ -40,8 +41,9 @@ jobs:
           fail=0
           mkdir -p build
 
-          for src in examples/*.s; do
+          for src in examples/*.s ds/*.s; do
             name=$(basename "$src" .s)
+            dir=$(dirname "$src")
             echo ""
             echo "=========================================="
             echo "== Example: $name"
@@ -62,8 +64,8 @@ jobs:
             fi
 
             # 运行：有 .stdin 文件则重定向输入，否则无输入
-            if [ -f "examples/$name.stdin" ]; then
-              "./build/$name" < "examples/$name.stdin" > "build/$name.out"
+            if [ -f "$dir/$name.stdin" ]; then
+              "./build/$name" < "$dir/$name.stdin" > "build/$name.out"
             else
               "./build/$name" > "build/$name.out"
             fi
@@ -71,19 +73,19 @@ jobs:
 
             # 预期退出码：有 .rc 文件则读取，否则默认 0
             want_rc=0
-            if [ -f "examples/$name.rc" ]; then
-              want_rc=$(cat "examples/$name.rc")
+            if [ -f "$dir/$name.rc" ]; then
+              want_rc=$(cat "$dir/$name.rc")
             fi
 
             echo "--- stdout ---"
             cat "build/$name.out"
             echo "--- exit code: $rc (expected $want_rc) ---"
 
-            if diff -u "examples/$name.expected" "build/$name.out" && [ "$rc" -eq "$want_rc" ]; then
+            if diff -u "$dir/$name.expected" "build/$name.out" && [ "$rc" -eq "$want_rc" ]; then
               echo "PASS: $name"
             else
               echo "FAIL: $name"
-              diff -u "examples/$name.expected" "build/$name.out"
+              diff -u "$dir/$name.expected" "build/$name.out"
               fail=$((fail+1))
             fi
           done

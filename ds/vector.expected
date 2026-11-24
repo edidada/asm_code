@@ -1,0 +1,4 @@
+vector size: 4
+vector data: 10 20 30 40
+pop: 40
+size after pop: 3
