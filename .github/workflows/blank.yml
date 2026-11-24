@@ -1,7 +1,10 @@
 # 汇编工程 CI 工作流
-# 功能：检出代码 -> 遍历 examples/（新手示例）与 ds/（模仿 tbox 的数据结构）下全部程序，
-#       逐个汇编、链接、运行，并与各自目录中的预期文件比对
-#       （stdout 逐字节 diff + 可选退出码比对 + 可选 stdin 输入）
+# 功能分三部分：
+#   1) 检出代码，展示工具链版本
+#   2) 冒烟测试：遍历 examples/（新手示例）与 ds/（数据结构，--defsym STANDALONE=1
+#      使其内嵌冒烟测试生效），逐个汇编、链接、运行，与预期文件比对
+#   3) 单元测试：遍历 tests/*_test.s（通过 .include "ds/xxx.s" 复用源码，
+#      内含 assert 式断言，逐个用例输出 "ok"），运行后与 tests/*.expected 逐字节比对
 # 校验文件约定（与源文件同名前缀、同目录）：
 #   <name>.expected  必需：预期 stdout 内容（逐字节比对）
 #   <name>.stdin     可选：运行时重定向到 stdin 的输入
@@ -23,7 +26,7 @@ on:
 
 jobs:
   build-and-test:
-    name: Build and test all assembly examples
+    name: Build and test all assembly programs
     runs-on: ubuntu-latest
     timeout-minutes: 5     # 防止程序挂死导致整个 job 卡 6 小时
 
@@ -36,7 +39,8 @@ jobs:
           as --version | head -n 1
           ld --version | head -n 1
 
-      - name: Build and test all examples
+      # ---------- 第一部分：冒烟测试（examples/ + ds/ 独立程序） ----------
+      - name: Smoke test examples and data structures
         run: |
           set +e                 # 手动管理错误，避免中途退出
           fail=0
@@ -47,10 +51,17 @@ jobs:
             dir=$(dirname "$src")
             echo ""
             echo "=========================================="
-            echo "== Example: $name"
+            echo "== Smoke: $name"
             echo "=========================================="
 
-            as -o "build/$name.o" "$src"
+            # ds/ 下源文件的内嵌冒烟测试被 .ifdef STANDALONE 包裹，
+            # 需要 --defsym 打开；examples/ 无条件编译，加了也无副作用
+            extra=""
+            if [ "$dir" = "ds" ]; then
+              extra="--defsym STANDALONE=1"
+            fi
+
+            as $extra -o "build/$name.o" "$src"
             if [ $? -ne 0 ]; then
               echo "FAIL: assemble $name"
               fail=$((fail+1))
@@ -95,9 +106,67 @@ jobs:
           echo ""
           echo "=========================================="
           if [ "$fail" -eq 0 ]; then
-            echo "ALL EXAMPLES PASSED"
+            echo "ALL SMOKE TESTS PASSED"
           else
-            echo "$fail example(s) FAILED"
+            echo "$fail smoke test(s) FAILED"
+          fi
+          echo "=========================================="
+          exit "$fail"
+
+      # ---------- 第二部分：单元测试（tests/，.include 复用 ds/ 源码） ----------
+      - name: Run unit tests
+        run: |
+          set +e
+          fail=0
+          mkdir -p build
+
+          for src in tests/*_test.s; do
+            name=$(basename "$src" .s)
+            echo ""
+            echo "=========================================="
+            echo "== Unit test: $name"
+            echo "=========================================="
+
+            as -o "build/$name.o" "$src"
+            if [ $? -ne 0 ]; then
+              echo "FAIL: assemble $name"
+              fail=$((fail+1))
+              continue
+            fi
+
+            ld -o "build/$name" "build/$name.o"
+            if [ $? -ne 0 ]; then
+              echo "FAIL: link $name"
+              fail=$((fail+1))
+              continue
+            fi
+
+            # 每个断言输出一行 ok；任一断言失败会输出 FAIL got=<x> want=<y>
+            timeout 10 "./build/$name" > "build/$name.out"
+            rc=$?
+
+            total=$(grep -c 'ok' tests/$name.expected)
+            passed=$(grep -c 'ok' build/$name.out)
+
+            echo "--- stdout ---"
+            cat "build/$name.out"
+            echo "--- exit code: $rc, assertions passed: $passed/$total ---"
+
+            if diff -u "tests/$name.expected" "build/$name.out" && [ "$rc" -eq 0 ]; then
+              echo "PASS: $name ($passed assertions)"
+            else
+              echo "FAIL: $name"
+              diff -u "tests/$name.expected" "build/$name.out" || true
+              fail=$((fail+1))
+            fi
+          done
+
+          echo ""
+          echo "=========================================="
+          if [ "$fail" -eq 0 ]; then
+            echo "ALL UNIT TESTS PASSED"
+          else
+            echo "$fail unit test suite(s) FAILED"
           fi
           echo "=========================================="
           exit "$fail"

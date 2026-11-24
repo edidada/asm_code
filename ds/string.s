@@ -140,6 +140,9 @@ print_int:
         ret
 
 # ---------------- 测试 ----------------
+# 冒烟测试：仅独立汇编时包含（as --defsym STANDALONE=1）
+# 完整单元测试见 tests/string_test.s
+.ifdef STANDALONE
 _start:
         call str_init
 
@@ -184,3 +187,4 @@ _start:
         movl $0, %ebx           # exit(0)
         movl $1, %eax
         int  $0x80
+.endif
