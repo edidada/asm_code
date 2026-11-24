@@ -25,6 +25,7 @@ jobs:
   build-and-test:
     name: Build and test all assembly examples
     runs-on: ubuntu-latest
+    timeout-minutes: 5     # 防止程序挂死导致整个 job 卡 6 小时
 
     steps:
       - name: Checkout repository
@@ -64,10 +65,11 @@ jobs:
             fi
 
             # 运行：有 .stdin 文件则重定向输入，否则无输入
+            # timeout 10：单程序最多跑 10 秒，挂死则被杀（rc=124），便于定位
             if [ -f "$dir/$name.stdin" ]; then
-              "./build/$name" < "$dir/$name.stdin" > "build/$name.out"
+              timeout 10 "./build/$name" < "$dir/$name.stdin" > "build/$name.out"
             else
-              "./build/$name" > "build/$name.out"
+              timeout 10 "./build/$name" > "build/$name.out"
             fi
             rc=$?
 
