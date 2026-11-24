@@ -1,7 +1,12 @@
-# 汇编工程 CI 工作流
-# 功能：检出代码 -> 汇编 hello.s -> 链接为可执行文件 -> 运行并校验输出
+# 汇编新手示例工程 CI 工作流
+# 功能：检出代码 -> 遍历 examples/ 下全部示例 -> 逐个汇编、链接、运行，
+#       并与 examples/ 中的预期文件比对（stdout 逐字节 diff + 可选退出码比对 + 可选 stdin 输入）
+# 校验文件约定（与示例同名前缀）：
+#   examples/<name>.expected  必需：预期 stdout 内容（逐字节比对）
+#   examples/<name>.stdin     可选：运行时重定向到 stdin 的输入
+#   examples/<name>.rc        可选：预期退出码（缺省为 0）
 # 说明：源码为 32 位 AT&T 语法，使用 int $0x80 系统调用；
-#       64 位 Linux 内核兼容该 32 位系统调用 ABI，故可直接在 ubuntu-latest 上构建运行。
+#       ubuntu-latest 上按宿主默认（64 位）汇编，int $0x80 经内核 32 位兼容层正常工作。
 
 name: CI
 
@@ -16,37 +21,83 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-and-run:
-    name: Assemble, link and run hello.s
+  build-and-test:
+    name: Build and test all assembly examples
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Show as/ld version
+      - name: Show toolchain versions
         run: |
           as --version | head -n 1
           ld --version | head -n 1
 
-      - name: Assemble hello.s
-        run: as -o hello.o hello.s
-
-      - name: Link to executable
-        run: ld -o hello hello.o
-
-      - name: Inspect artifact
-        run: file hello
-
-      - name: Run and verify output
+      - name: Build and test all examples
         run: |
-          ./hello > actual_output.txt
-          echo "Actual output bytes:"
-          xxd actual_output.txt
-          printf 'Hello World!\n' > expected_output.txt
-          if diff -u expected_output.txt actual_output.txt; then
-            echo "PASSED: output matches expected."
+          set +e                 # 手动管理错误，避免中途退出
+          fail=0
+          mkdir -p build
+
+          for src in examples/*.s; do
+            name=$(basename "$src" .s)
+            echo ""
+            echo "=========================================="
+            echo "== Example: $name"
+            echo "=========================================="
+
+            as -o "build/$name.o" "$src"
+            if [ $? -ne 0 ]; then
+              echo "FAIL: assemble $name"
+              fail=$((fail+1))
+              continue
+            fi
+
+            ld -o "build/$name" "build/$name.o"
+            if [ $? -ne 0 ]; then
+              echo "FAIL: link $name"
+              fail=$((fail+1))
+              continue
+            fi
+
+            # 运行：有 .stdin 文件则重定向输入，否则无输入
+            if [ -f "examples/$name.stdin" ]; then
+              "./build/$name" < "examples/$name.stdin" > "build/$name.out"
+            else
+              "./build/$name" > "build/$name.out"
+            fi
+            rc=$?
+
+            # 预期退出码：有 .rc 文件则读取，否则默认 0
+            want_rc=0
+            if [ -f "examples/$name.rc" ]; then
+              want_rc=$(cat "examples/$name.rc")
+            fi
+
+            echo "--- stdout ---"
+            cat "build/$name.out"
+            echo "--- exit code: $rc (expected $want_rc) ---"
+
+            if diff -u "examples/$name.expected" "build/$name.out" && [ "$rc" -eq "$want_rc" ]; then
+              echo "PASS: $name"
+            else
+              echo "FAIL: $name"
+              diff -u "examples/$name.expected" "build/$name.out"
+              fail=$((fail+1))
+            fi
+          done
+
+          echo ""
+          echo "=========================================="
+          if [ "$fail" -eq 0 ]; then
+            echo "ALL EXAMPLES PASSED"
           else
-            echo "FAILED: output did not match expected."
-            exit 1
+            echo "$fail example(s) FAILED"
           fi
+          echo "=========================================="
+          exit "$fail"
+
+      - name: List built artifacts
+        if: always()
+        run: ls -la build/

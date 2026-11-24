@@ -1,5 +1,6 @@
 # AT&T 格式
-# Hello.s
+# 示例 1：Hello World —— 最小的 Linux 汇编程序
+# 功能：通过 sys_write 向标准输出写字符串，再通过 sys_exit 正常退出
 .data    # 数据段声明
          msg : .ascii "Hello World!"           # 字符串主体（.ascii 不自动追加 NUL）
              .byte 10                          # 换行符 '\n' (LF, 0x0A)，用显式字节避免转义歧义
